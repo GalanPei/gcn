@@ -120,7 +120,10 @@ def preprocess_features(features):
 
 
 def normalize_adj(adj):
-    """Symmetrically normalize adjacency matrix."""
+    """
+    Symmetrically normalize adjacency matrix.
+    D^-0.5*A*D^-0.5
+    """
     adj = sp.coo_matrix(adj)
     rowsum = np.array(adj.sum(1))
     d_inv_sqrt = np.power(rowsum, -0.5).flatten()
@@ -133,6 +136,11 @@ def preprocess_adj(adj):
     """Preprocessing of adjacency matrix for simple GCN model and conversion to tuple representation."""
     adj_normalized = normalize_adj(adj + sp.eye(adj.shape[0]))
     return sparse_to_tuple(adj_normalized)
+
+
+def original_process(adj, sign):
+    original_m = sp.eye(adj.shape[0]) + sign*normalize_adj(adj)
+    return sparse_to_tuple(original_m)
 
 
 def construct_feed_dict(features, support, labels, labels_mask, placeholders):

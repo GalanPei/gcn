@@ -12,20 +12,15 @@ from gcn.models import GCN, MLP
 seed = 123
 np.random.seed(seed)
 tf.set_random_seed(seed)
+num_MC = 50
+epoch_max = 20
 
 # Settings
 flags = tf.app.flags
 FLAGS = flags.FLAGS
 flags.DEFINE_string('dataset', 'cora', 'Dataset string.')  # 'cora', 'citeseer', 'pubmed'
-# flags.DEFINE_string('dataset', 'citeseer', 'Dataset string.')
-# flags.DEFINE_string('dataset', 'pubmed', 'Dataset string.')
-# flags.DEFINE_string('model', 'gcn', 'Model string.')  # 'gcn', 'gcn_cheby', 'dense'
-# flags.DEFINE_string('model', 'gcn_cheby', 'Model string.')  # 'gcn', 'gcn_cheby', 'dense'
-# flags.DEFINE_string('model', 'gcn_test1', 'Model string.')
-# flags.DEFINE_string('model', 'gcn_test2', 'Model string.')
 flags.DEFINE_string('model', 'gcn', 'Model string.')
 flags.DEFINE_float('learning_rate', 0.01, 'Initial learning rate.')
-flags.DEFINE_integer('epochs', 200, 'Number of epochs to train.')
 flags.DEFINE_integer('hidden1', 16, 'Number of units in hidden layer 1.')
 flags.DEFINE_float('dropout', 0.5, 'Dropout rate (1 - keep probability).')
 flags.DEFINE_float('weight_decay', 5e-4, 'Weight for L2 loss on embedding matrix.')
@@ -96,42 +91,31 @@ cost_val = []
 
 # Save the data to CSV file
 # data = pd.read_csv('/Users/galan/Documents/Python Projects/gcn/gcn/data/train_result.csv', header=None)
-data_array = np.zeros((1, 6))
-# Train model
-for epoch in range(FLAGS.epochs):
+data_array = np.zeros((epoch_max, 4))
+for i in range(num_MC):
+    temp_array = np.zeros((epoch_max, 4))
 
-    t = time.time()
-    # Construct feed dictionary
-    feed_dict = construct_feed_dict(features, support, y_train, train_mask, placeholders)
-    feed_dict.update({placeholders['dropout']: FLAGS.dropout})
+    for epoch_num in range(1, epoch_max + 1):
+        # flags.DEFINE_integer('epochs', int(epoch_num), 'Number of epochs to train.')
+        for epoch in range(int(epoch_num)):
+            t = time.time()
+            # Construct feed dictionary
+            feed_dict = construct_feed_dict(features, support, y_train, train_mask, placeholders)
+            feed_dict.update({placeholders['dropout']: FLAGS.dropout})
 
-    # Training step
-    outs = sess.run([model.opt_op, model.loss, model.accuracy], feed_dict=feed_dict)
+            # Training step
+            outs = sess.run([model.opt_op, model.loss, model.accuracy], feed_dict=feed_dict)
 
-    # Validation
-    cost, acc, duration = evaluate(features, support, y_val, val_mask, placeholders)
-    cost_val.append(cost)
-    t1 = time.time() - t
-
-    # Print results
-    print("Epoch:", '%04d' % (epoch + 1), "train_loss=", "{:.5f}".format(outs[1]),
-          "train_acc=", "{:.5f}".format(outs[2]), "val_loss=", "{:.5f}".format(cost),
-          "val_acc=", "{:.5f}".format(acc), "time=", "{:.5f}".format(t1))
-
-    new_data = np.array([[epoch + 1, outs[1], outs[2], cost, acc, t1]])
-    data_array = np.concatenate((data_array, new_data), axis=0)
-
-    if epoch > FLAGS.early_stopping and cost_val[-1] > np.mean(cost_val[-(FLAGS.early_stopping + 1):-1]):
-        print("Early stopping...")
-        break
-
-print("Optimization Finished!")
-
-# Testing
-test_cost, test_acc, test_duration = evaluate(features, support, y_test, test_mask, placeholders)
-print("Test set results:", "cost=", "{:.5f}".format(test_cost),
-      "accuracy=", "{:.5f}".format(test_acc), "time=", "{:.5f}".format(test_duration))
-
-save = pd.DataFrame(data_array, columns=['Epoch', 'train_loss', 'train_acc', 'val_loss', 'val_acc', 'time'])
-path = '/Users/galan/Documents/Python Projects/gcn/gcn/data/' + FLAGS.dataset + '_' + FLAGS.model + '_result.csv'
+            # Validation
+            cost, acc, duration = evaluate(features, support, y_val, val_mask, placeholders)
+            cost_val.append(cost)
+            t1 = time.time() - t
+        test_cost, test_acc, test_duration = evaluate(features, support, y_test, test_mask, placeholders)
+        # print("Test set results:", "cost=", "{:.5f}".format(test_cost),
+        #       "accuracy=", "{:.5f}".format(test_acc), "time=", "{:.5f}".format(test_duration))
+        temp_array[epoch_num - 1, :] = np.array([[epoch_num, test_cost, test_acc, test_duration]])
+    data_array += temp_array
+data_array /= num_MC
+save = pd.DataFrame(data_array, columns=['Epoch', 'cost', 'accuracy', 'time'])
+path = '/Users/galan/Documents/Python Projects/gcn/gcn/data/' + FLAGS.dataset + '_' + FLAGS.model + '_testAdj.csv'
 save.to_csv(path, index=False)
